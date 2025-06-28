@@ -37,7 +37,7 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_
 def webhook():
     update_data = request.get_json(force=True)
     update = Update.de_json(update_data, telegram_app.bot)
-    telegram_app.update_queue.put_nowait(update)
+    telegram_app.create_task(telegram_app.process_update(update))
     return jsonify({"status": "ok"})
 
 @app.route("/")
@@ -47,5 +47,14 @@ def index():
 if __name__ == "__main__":
     import asyncio
     port = int(os.environ.get("PORT", 10000))
-    telegram_app.run_webhook(listen="0.0.0.0", port=port, webhook_url=f"https://your-app-name.onrender.com/{TELEGRAM_BOT_TOKEN}")
+
+    async def run():
+        await telegram_app.initialize()
+        await telegram_app.start()
+        await telegram_app.bot.set_webhook(url=f"https://telegram-chatgpt-bot-ai.onrender.com/{TELEGRAM_BOT_TOKEN}")
+        print("Webhook set")
+        await telegram_app.updater.start_polling()
+
+    asyncio.run(run())
     app.run(host="0.0.0.0", port=port)
+
