@@ -1,6 +1,3 @@
-# FINAL version – NO Updater used, PTB v20+ and Python 3.13 compatible
-# Webhook-based, works perfectly on Render
-
 import os
 import openai
 from flask import Flask, request, jsonify
@@ -42,7 +39,7 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "Bot is live and running on PTB v20+"
+    return "Bot is running"
 
 if __name__ == "__main__":
     import asyncio
@@ -53,6 +50,7 @@ if __name__ == "__main__":
         await telegram_app.bot.set_webhook(url=f"https://telegram-chatgpt-bot-ai.onrender.com/{TELEGRAM_BOT_TOKEN}")
         print("Webhook set")
 
-    asyncio.get_event_loop().run_until_complete(run())
+    asyncio.run(run())
+
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
