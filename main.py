@@ -48,13 +48,11 @@ if __name__ == "__main__":
     import asyncio
     port = int(os.environ.get("PORT", 10000))
 
-    async def run():
+    async def start_bot():
         await telegram_app.initialize()
         await telegram_app.start()
         await telegram_app.bot.set_webhook(url=f"https://telegram-chatgpt-bot-ai.onrender.com/{TELEGRAM_BOT_TOKEN}")
         print("Webhook set")
-        await telegram_app.updater.start_polling()
 
-    asyncio.run(run())
+    asyncio.run(start_bot())
     app.run(host="0.0.0.0", port=port)
-
