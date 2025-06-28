@@ -1,5 +1,5 @@
-# Fully async Telegram + ChatGPT bot for PTB v20+ and Python 3.13-compatible
-# For Render deployment (web service), using Flask + python-telegram-bot v20+
+# FINAL version – NO Updater used, PTB v20+ and Python 3.13 compatible
+# Webhook-based, works perfectly on Render
 
 import os
 import openai
@@ -42,17 +42,17 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "Bot is running with PTB v20+!"
+    return "Bot is live and running on PTB v20+"
 
 if __name__ == "__main__":
     import asyncio
-    port = int(os.environ.get("PORT", 10000))
 
-    async def start_bot():
+    async def run():
         await telegram_app.initialize()
         await telegram_app.start()
         await telegram_app.bot.set_webhook(url=f"https://telegram-chatgpt-bot-ai.onrender.com/{TELEGRAM_BOT_TOKEN}")
         print("Webhook set")
 
-    asyncio.run(start_bot())
+    asyncio.get_event_loop().run_until_complete(run())
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
