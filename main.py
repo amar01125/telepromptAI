@@ -1,59 +1,61 @@
-# Fixed: Fully async Telegram + ChatGPT bot for PTB v20+ and Python 3.13-compatible
-# No Updater used, designed for Render deployment (web service)
-
-import os
-import openai
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from telegram import Update
-from telegram.ext import Application, ContextTypes, MessageHandler, filters
-import asyncio
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import openai
+import os
 
-app = Flask(__name__)
+# ENV variables
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+BASE_URL = os.environ.get("RENDER_EXTERNAL_URL")  # render provides this automatically
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# Set OpenAI key
 openai.api_key = OPENAI_API_KEY
 
+# Flask app
+flask_app = Flask(__name__)
+
+# Telegram app
 telegram_app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-# Handle incoming Telegram messages
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_msg = update.message.text
-    chat_id = update.effective_chat.id
+# Command: /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Hey! I am your ChatGPT bot. Ask me anything ✨")
 
+# Message handler
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_input = update.message.text
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": user_msg}]
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": user_input},
+            ]
         )
-        bot_response = response["choices"][0]["message"]["content"]
+        reply = response.choices[0].message.content.strip()
     except Exception as e:
-        bot_response = f"Error: {e}"
+        reply = f"Error from OpenAI: {e}"
 
-    await context.bot.send_message(chat_id=chat_id, text=bot_response)
+    await update.message.reply_text(reply)
 
+# Add handlers
+telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# Flask route for Telegram webhook
-@app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
+# Webhook route
+@flask_app.route("/webhook", methods=["POST"])
 def webhook():
-    update_data = request.get_json(force=True)
-    update = Update.de_json(update_data, telegram_app.bot)
-    telegram_app.create_task(telegram_app.process_update(update))
-    return jsonify({"status": "ok"})
+    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    telegram_app.update_queue.put_nowait(update)
+    return "ok"
 
-@app.route("/")
-def index():
-    return "Bot is running with PTB v20+!"
+# Set webhook on startup
+@flask_app.before_first_request
+def setup_webhook():
+    webhook_url = BASE_URL + "webhook"
+    telegram_app.bot.set_webhook(webhook_url)
 
-if __name__ == "__main__":
-    async def run():
-        await telegram_app.initialize()
-        await telegram_app.start()
-        await telegram_app.bot.set_webhook(url=f"https://telegram-chatgpt-bot-ai.onrender.com/{TELEGRAM_BOT_TOKEN}")
-        print("Webhook set")
-
-    loop = asyncio.get_event_loop()
-    loop.create_task(run())
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+# Run flask server
+if __name__ == '__main__':
+    flask_app.run(host="0.0.0.0", port=10000)
