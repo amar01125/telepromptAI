@@ -1,61 +1,45 @@
 from flask import Flask, request
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import openai
+from telegram import Bot, Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 import os
 
-# ENV variables
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-BASE_URL = os.environ.get("RENDER_EXTERNAL_URL")  # render provides this automatically
+# Load environment variables
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+BASE_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
-# Set OpenAI key
-openai.api_key = OPENAI_API_KEY
+if not TOKEN or not BASE_URL:
+    raise Exception("Missing TELEGRAM_BOT_TOKEN or RENDER_EXTERNAL_URL")
 
-# Flask app
-flask_app = Flask(__name__)
+bot = Bot(token=TOKEN)
+app = Flask(__name__)
 
-# Telegram app
-telegram_app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-# Command: /start
+# Telegram command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hey! I am your ChatGPT bot. Ask me anything ✨")
+    await update.message.reply_text("Hello! Bot is working.")
 
-# Message handler
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": user_input},
-            ]
-        )
-        reply = response.choices[0].message.content.strip()
-    except Exception as e:
-        reply = f"Error from OpenAI: {e}"
-
-    await update.message.reply_text(reply)
-
-# Add handlers
+telegram_app = Application.builder().token(TOKEN).build()
 telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# Webhook route
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+@app.route(f"/webhook/{TOKEN}", methods=["POST"])
+def telegram_webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
     telegram_app.update_queue.put_nowait(update)
     return "ok"
 
-# Set webhook on startup
-@flask_app.before_first_request
-def setup_webhook():
-    webhook_url = BASE_URL + "webhook"
-    telegram_app.bot.set_webhook(webhook_url)
+@app.route("/")
+def index():
+    return "Bot is Live!"
 
-# Run flask server
-if __name__ == '__main__':
-    flask_app.run(host="0.0.0.0", port=10000)
+if __name__ == "__main__":
+    import asyncio
+
+    # Set webhook
+    async def set_webhook():
+        webhook_url = f"{BASE_URL}/webhook/{TOKEN}"
+        await bot.set_webhook(webhook_url)
+        print(f"Webhook set to: {webhook_url}")
+
+    asyncio.run(set_webhook())
+    
+    # Start Flask app
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
